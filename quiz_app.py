@@ -80,8 +80,13 @@ if 'results' not in st.session_state:
 if 'input_key' not in st.session_state:
     st.session_state.input_key = 0  # To reset input field
 
+# ... (Previous code)
+
 # --- Sidebar ---
 st.sidebar.title("Navigation")
+
+# Mode Selector
+mode = st.sidebar.radio("Quiz Mode", ["Reading (Eng -> Kor)", "Dictation (Listen -> Write)"])
 
 # File Uploader
 uploaded_file = st.sidebar.file_uploader("📂 Upload Vocabulary (.xlsx)", type=['xlsx'])
@@ -119,12 +124,12 @@ if st.session_state.data is not None:
     cols = st.sidebar.columns(5)
     for i in range(st.session_state.total_words):
         status = st.session_state.results[i]
-        label = f"{i+1}" # Simplified label
+        label = f"{i+1}"
         
         # Color logic
         if status is True:
             emoji = "✅"
-            kind = "primary" # Highlight checked
+            kind = "primary"
         elif status is False:
             emoji = "❌"
             kind = "secondary"
@@ -132,10 +137,8 @@ if st.session_state.data is not None:
             emoji = ""
             kind = "secondary"
             
-        # Use simple number label, maybe with emoji if checked
         btn_label = f"{label} {emoji}" if emoji else label
         
-        # Use use_container_width for uniform size
         if cols[i%5].button(btn_label, key=f"nav_{i}", help=f"Go to Question {i+1}", use_container_width=True):
             st.session_state.current_index = i
             st.session_state.input_key += 1 # Reset input
@@ -163,13 +166,23 @@ if st.session_state.data is not None:
 
     st.markdown("---")
     
-    # Word Display
-    st.markdown(f"<h1 style='text-align: center; color: #333;'>{english_word}</h1>", unsafe_allow_html=True)
+    # Word Display Area
+    is_dictation = mode == "Dictation (Listen -> Write)"
+    
+    if is_dictation:
+        # Hide word, show placeholder
+        display_text = "❓ ❓ ❓"
+    else:
+        display_text = english_word
+        
+    st.markdown(f"<h1 style='text-align: center; color: #333;'>{display_text}</h1>", unsafe_allow_html=True)
     
     # Audio Controls
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🔊 Play Word", key=f"audio_{idx}", use_container_width=True):
+        # In Dictation, audio is crucial, so we might want to autoplay or highlight it
+        label = "🔊 Play Word" + (" (Listen!)" if is_dictation else "")
+        if st.button(label, key=f"audio_{idx}", use_container_width=True):
             st.markdown(get_audio_html(english_word), unsafe_allow_html=True)
             
     with c2:
@@ -183,17 +196,47 @@ if st.session_state.data is not None:
 
     # Input Form
     with st.form(key=f"quiz_form_{idx}_{st.session_state.input_key}"):
-        user_input = st.text_input("Meaning (Korean):", autocomplete="off")
+        
+        if is_dictation:
+            col_spelling, col_meaning = st.columns(2)
+            with col_spelling:
+                user_spelling = st.text_input("English Spelling:", autocomplete="off")
+            with col_meaning:
+                user_meaning = st.text_input("Korean Meaning:", autocomplete="off")
+        else:
+            user_meaning = st.text_input("Meaning (Korean):", autocomplete="off")
+            user_spelling = None # Not used
+
         submitted = st.form_submit_button("Submit", use_container_width=True)
 
         if submitted:
-            if is_correct(user_input, korean_meaning):
-                st.success("Correct! 🎉")
-                if st.session_state.results[idx] is not True: # Only increment if not already correct
+            # Check logic
+            correct_meaning = is_correct(user_meaning, korean_meaning)
+            
+            if is_dictation:
+                correct_spelling = is_correct(user_spelling, english_word)
+                is_right = correct_meaning and correct_spelling
+                
+                if is_right:
+                    st.success("Perfect! 🎉")
+                else:
+                    msg = []
+                    if not correct_spelling: msg.append(f"Spelling: {english_word}")
+                    if not correct_meaning: msg.append(f"Meaning: {korean_meaning}")
+                    st.error(f"Incorrect. ({', '.join(msg)})")
+            else:
+                is_right = correct_meaning
+                if is_right:
+                    st.success("Correct! 🎉")
+                else:
+                    st.error(f"Incorrect. Answer: {korean_meaning}")
+
+            # Grading
+            if is_right:
+                if st.session_state.results[idx] is not True: 
                     st.session_state.score += 1
                 st.session_state.results[idx] = True
             else:
-                st.error(f"Incorrect. Answer: {korean_meaning}")
                 st.session_state.results[idx] = False
             
             # Show Next Button outside form (to avoid nested form issues, Streamlit quirks)
