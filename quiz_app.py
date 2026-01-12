@@ -4,6 +4,7 @@ from gtts import gTTS
 import requests
 import io
 import base64
+import difflib
 
 # Page Config
 st.set_page_config(page_title="English Vocab Quiz", page_icon="📝")
@@ -11,6 +12,18 @@ st.set_page_config(page_title="English Vocab Quiz", page_icon="📝")
 # --- Helper Functions ---
 def clean_text(text):
     return "".join([c for c in text if c.isalpha() or c.isdigit() or c.isspace()]).strip()
+
+def is_correct(user_input, answer, threshold=0.85):
+    """Checks if the answer is correct using fuzzy matching."""
+    user_input = clean_text(str(user_input).lower())
+    answer = clean_text(str(answer).lower())
+    
+    if user_input == answer:
+        return True
+    
+    # Fuzzy match
+    similarity = difflib.SequenceMatcher(None, user_input, answer).ratio()
+    return similarity >= threshold
 
 def get_audio_html(text, label="Play Audio"):
     """Generates an HTML audio player for the given text using gTTS."""
@@ -106,25 +119,29 @@ if st.session_state.data is not None:
     cols = st.sidebar.columns(5)
     for i in range(st.session_state.total_words):
         status = st.session_state.results[i]
-        label = f"Q{i+1}"
+        label = f"{i+1}" # Simplified label
         
         # Color logic
         if status is True:
-            color = "green" 
             emoji = "✅"
+            kind = "primary" # Highlight checked
         elif status is False:
-            color = "red"
             emoji = "❌"
+            kind = "secondary"
         else:
-            color = "gray"
             emoji = ""
+            kind = "secondary"
             
-        if cols[i%5].button(f"{i+1}{emoji}", key=f"nav_{i}", help=f"Go to Question {i+1}"):
+        # Use simple number label, maybe with emoji if checked
+        btn_label = f"{label} {emoji}" if emoji else label
+        
+        # Use use_container_width for uniform size
+        if cols[i%5].button(btn_label, key=f"nav_{i}", help=f"Go to Question {i+1}", use_container_width=True):
             st.session_state.current_index = i
             st.session_state.input_key += 1 # Reset input
             st.rerun()
 
-    if st.sidebar.button("↻ Reset Quiz"):
+    if st.sidebar.button("↻ Reset Quiz", use_container_width=True):
         st.session_state.current_index = 0
         st.session_state.score = 0
         st.session_state.results = [None] * st.session_state.total_words
@@ -152,11 +169,11 @@ if st.session_state.data is not None:
     # Audio Controls
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🔊 Play Word", key=f"audio_{idx}"):
+        if st.button("🔊 Play Word", key=f"audio_{idx}", use_container_width=True):
             st.markdown(get_audio_html(english_word), unsafe_allow_html=True)
             
     with c2:
-        if st.button("💡 Hint", key=f"hint_{idx}"):
+        if st.button("💡 Hint", key=f"hint_{idx}", use_container_width=True):
             with st.spinner("Fetching definition..."):
                 definition = fetch_hint(english_word)
                 st.info(f"Hint: {definition}")
@@ -167,10 +184,10 @@ if st.session_state.data is not None:
     # Input Form
     with st.form(key=f"quiz_form_{idx}_{st.session_state.input_key}"):
         user_input = st.text_input("Meaning (Korean):", autocomplete="off")
-        submitted = st.form_submit_button("Submit")
+        submitted = st.form_submit_button("Submit", use_container_width=True)
 
         if submitted:
-            if user_input.strip() == str(korean_meaning).strip():
+            if is_correct(user_input, korean_meaning):
                 st.success("Correct! 🎉")
                 if st.session_state.results[idx] is not True: # Only increment if not already correct
                     st.session_state.score += 1
